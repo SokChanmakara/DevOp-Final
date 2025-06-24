@@ -1,4 +1,22 @@
 services:
+  # HAProxy Load Balancer
+  haproxy:
+    image: haproxy:2.8-alpine
+    container_name: haproxy_loadbalancer
+    ports:
+      - "8090:8090"  # Main load balancer port
+      - "2223:2223"  # SSH access through load balancer
+    volumes:
+      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - ./haproxy-errors:/usr/local/etc/haproxy/errors:ro
+    depends_on:
+      - app
+      - mysql
+      - ssh-server
+    networks:
+      - app-network
+    restart: unless-stopped
+
   app:
     build: .
     container_name: app_devop
@@ -7,29 +25,64 @@ services:
       - ./laravel:/var/www
       - ./php.ini:/usr/local/etc/php/php.ini
     networks:
-      - laravel
-  webserver:
+      - app-network
+
+  nginx:
     image: nginx:latest
     container_name: nginx_server_devop
     ports:
-      - "8100:80"
+      - "8100:80"  # Keep original port for direct access
     volumes:
       - ./laravel:/var/www
       - ./nginx.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - app
     networks:
-      - laravel
-  db:
+      - app-network
+
+  mysql:
     image: mysql:8.0
     container_name: mysql_db_devop
     ports:
-      - "3306:3306"
+      - "3307:3306"  # Changed to avoid conflict with HAProxy
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: laravel
       MYSQL_USER: laravel
       MYSQL_PASSWORD: laravel
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./backup_chanmakara.sql:/docker-entrypoint-initdb.d/backup.sql:ro
     networks:
-      - laravel
+      - app-network
+    restart: unless-stopped
+
+  # SSH Service (if you need SSH access to containers)
+  ssh-server:
+    image: lscr.io/linuxserver/openssh-server:latest
+    container_name: ssh_server_devop
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Asia/Phnom_Penh
+      - PASSWORD_ACCESS=true
+      - USER_PASSWORD=devops123
+      - USER_NAME=devops
+    volumes:
+      - ./laravel:/var/www:ro
+      - ssh_config:/config
+    ports:
+      - "2224:2222"  # Direct SSH access (backup)
+    networks:
+      - app-network
+    restart: unless-stopped
+
 networks:
-  laravel:
+  app-network:
     driver: bridge
+
+volumes:
+  mysql_data:
+    driver: local
+  ssh_config:
+    driver: local
