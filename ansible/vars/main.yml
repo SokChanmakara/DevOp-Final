@@ -1,0 +1,24 @@
+---
+# Laravel application settings
+laravel_app_path: "/var/www"
+laravel_storage_path: "/var/www/storage"
+laravel_database_path: "/var/www/database"
+
+# Git settings
+git_repo_url: "https://github.com/your-username/your-repo.git" # Update this with your actual repo
+git_branch: "main"
+
+# Database settings
+mysql_host: "127.0.0.1"
+mysql_port: "3306"
+mysql_database: "chanmakara-db"
+mysql_user: "root"
+mysql_password: "Hello@123"
+
+# Backup settings
+backup_path: "/var/www/storage/backups"
+backup_filename: "backup_{{ ansible_date_time.epoch }}.sql"
+
+# Testing settings
+test_database: "sqlite"
+test_db_path: "/var/www/database/testing.sqlite"

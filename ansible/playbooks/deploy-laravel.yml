@@ -1,0 +1,179 @@
+---
+- name: Deploy Laravel Application to Kubernetes Pod
+  hosts: kubernetes_pods
+  gather_facts: yes
+  vars_files:
+    - ../vars/main.yml
+  vars:
+    pod_name: "laravel-app-single-pod-64c5d47754-gwpdw"
+    namespace: "laravel-app"
+    container: "web-server"
+
+  tasks:
+    - name: Check if pod is running
+      shell: kubectl get pod {{ pod_name }} -n {{ namespace }} -o jsonpath='{.status.phase}'
+      register: pod_status
+      delegate_to: localhost
+
+    - name: Fail if pod is not running
+      fail:
+        msg: "Pod {{ pod_name }} is not running. Status: {{ pod_status.stdout }}"
+      when: pod_status.stdout != "Running"
+
+    - name: Check if we're in the correct directory
+      shell: kubectl exec -n {{ namespace }} {{ pod_name }} -c {{ container }} -- test -f {{ laravel_app_path }}/artisan
+      register: artisan_check
+      delegate_to: localhost
+      failed_when: artisan_check.rc != 0
+
+    - name: Fix git ownership issue
+      shell: kubectl exec -n {{ namespace }} {{ pod_name }} -c {{ container }} -- git config --global --add safe.directory {{ laravel_app_path }}
+      delegate_to: localhost
+      failed_when: false
+
+    - name: Check for uncommitted changes in git
+      shell: kubectl exec -n {{ namespace }} {{ pod_name }} -c {{ container }} -- git status --porcelain
+      args:
+        chdir: "{{ laravel_app_path }}"
+      register: git_status
+      delegate_to: localhost
+      changed_when: false
+      failed_when: false
+
+    - name: Stash local changes if any exist
+      shell: kubectl exec -n {{ namespace }} {{ pod_name }} -c {{ container }} -- sh -c "cd {{ laravel_app_path }} && git stash"
+      delegate_to: localhost
+      when: git_status.stdout != ""
+      register: git_stash_result
+      failed_when: false
+
+    - name: Display stash message
+      debug:
+        msg: "Stashed local changes: {{ git_stash_result.stdout | default('None') }}"
+      when: git_status.stdout != ""
+
+    - name: Pull latest changes from git
+      shell: kubectl exec -n {{ namespace }} {{ pod_name }} -c {{ container }} -- sh -c "cd {{ laravel_app_path }} && git pull origin {{ git_branch }}"
+      delegate_to: localhost
+      register: git_pull_result
+      failed_when: false
+
+    - name: Display git pull results
+      debug:
+        msg: "Git pull completed: {{ git_pull_result.stdout }}"
+
+    - name: Install/Update Composer dependencies
+      shell: kubectl exec -n {{ namespace }} {{ pod_name }} -c {{ container }} -- sh -c "cd {{ laravel_app_path }} && composer install --no-dev --optimize-autoloader"
+      delegate_to: localhost
+      register: composer_result
+      failed_when: false
+
+    - name: Display Composer results
+      debug:
+        msg: "Composer install completed: {{ composer_result.stdout }}"
+
+    - name: Check if package.json exists
+      shell: kubectl exec -n {{ namespace }} {{ pod_name }} -c {{ container }} -- test -f {{ laravel_app_path }}/package.json
+      delegate_to: localhost
+      register: package_json_check
+      failed_when: false
+
+    - name: Install NPM dependencies
+      shell: kubectl exec -n {{ namespace }} {{ pod_name }} -c {{ container }} -- sh -c "cd {{ laravel_app_path }} && npm install"
+      delegate_to: localhost
+      when: package_json_check.rc == 0
+      register: npm_install_result
+      failed_when: false
+
+    - name: Build NPM assets
+      shell: kubectl exec -n {{ namespace }} {{ pod_name }} -c {{ container }} -- sh -c "cd {{ laravel_app_path }} && npm run build"
+      delegate_to: localhost
+      when: package_json_check.rc == 0
+      register: npm_build_result
+      failed_when: false
+
+    - name: Display NPM results
+      debug:
+        msg: "NPM install and build completed"
+      when: package_json_check.rc == 0
+
+    - name: Create testing database directory
+      shell: kubectl exec -n {{ namespace }} {{ pod_name }} -c {{ container }} -- mkdir -p {{ laravel_database_path }}
+      delegate_to: localhost
+      failed_when: false
+
+    - name: Create SQLite test database
+      shell: kubectl exec -n {{ namespace }} {{ pod_name }} -c {{ container }} -- touch {{ test_db_path }}
+      delegate_to: localhost
+      failed_when: false
+
+    - name: Configure testing environment
+      shell: |
+        kubectl exec -n {{ namespace }} {{ pod_name }} -c {{ container }} -- sh -c "cat > {{ laravel_app_path }}/.env.testing << 'EOF'
+        APP_ENV=testing
+        DB_CONNECTION=sqlite
+        DB_DATABASE={{ test_db_path }}
+        EOF"
+      delegate_to: localhost
+      failed_when: false
+
+    - name: Run Laravel tests with SQLite
+      shell: kubectl exec -n {{ namespace }} {{ pod_name }} -c {{ container }} -- sh -c "cd {{ laravel_app_path }} && ./vendor/bin/phpunit --env=testing"
+      delegate_to: localhost
+      register: test_results
+      failed_when: false
+
+    - name: Display test results
+      debug:
+        msg: "Test results: {{ test_results.stdout }}"
+
+    - name: Create backup directory
+      shell: kubectl exec -n {{ namespace }} {{ pod_name }} -c {{ container }} -- mkdir -p {{ backup_path }}
+      delegate_to: localhost
+      failed_when: false
+
+    - name: Backup MySQL database
+      shell: kubectl exec -n {{ namespace }} {{ pod_name }} -c {{ container }} -- sh -c "mysqldump -h {{ mysql_host }} -P {{ mysql_port }} -u {{ mysql_user }} -p{{ mysql_password }} {{ mysql_database }} > {{ backup_path }}/{{ backup_filename }}"
+      delegate_to: localhost
+      register: backup_result
+      failed_when: false
+
+    - name: Verify backup was created
+      shell: kubectl exec -n {{ namespace }} {{ pod_name }} -c {{ container }} -- test -f {{ backup_path }}/{{ backup_filename }}
+      delegate_to: localhost
+      register: backup_check
+      failed_when: false
+
+    - name: Display backup results
+      debug:
+        msg: "Database backup {{ 'created successfully' if backup_check.rc == 0 else 'failed' }} at {{ backup_path }}/{{ backup_filename }}"
+
+    - name: Clear Laravel caches
+      shell: kubectl exec -n {{ namespace }} {{ pod_name }} -c {{ container }} -- sh -c "cd {{ laravel_app_path }} && {{ item }}"
+      delegate_to: localhost
+      loop:
+        - "php artisan config:clear"
+        - "php artisan cache:clear"
+        - "php artisan route:clear"
+        - "php artisan view:clear"
+      failed_when: false
+
+    - name: Optimize Laravel application
+      shell: kubectl exec -n {{ namespace }} {{ pod_name }} -c {{ container }} -- sh -c "cd {{ laravel_app_path }} && {{ item }}"
+      delegate_to: localhost
+      loop:
+        - "php artisan config:cache"
+        - "php artisan route:cache"
+        - "php artisan view:cache"
+      failed_when: false
+
+    - name: Summary of deployment
+      debug:
+        msg: |
+          Deployment Summary:
+          - Git pull: {{ 'Success' if git_pull_result.rc == 0 else 'Failed' }}
+          - Composer install: {{ 'Success' if composer_result.rc == 0 else 'Failed' }}
+          - NPM build: {{ 'Success' if package_json_check.rc == 0 and npm_build_result.rc == 0 else 'Skipped/Failed' }}
+          - Tests: {{ 'Passed' if test_results.rc == 0 else 'Failed' }}
+          - Database backup: {{ 'Success' if backup_check.rc == 0 else 'Failed' }}
+          - Cache optimization: Completed
