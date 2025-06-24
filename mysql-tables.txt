@@ -1,3 +1,11 @@
-kubectl exec -it -n laravel-app deployment/laravel-app-single-pod -c mysql-db -- mysql -u root -pHello@123 chanmakara-db -e 
-"SHOW TABLES;"
+kubectl exec -it -n laravel-app deployment/laravel-app-single-pod -c mysql-db -- mysql -u root -pHello@123 -e "SHOW DATABASES;"
 mysql: [Warning] Using a password on the command line interface can be insecure.
++--------------------+
+| Database           |
++--------------------+
+| chanmakara-db      |
+| information_schema |
+| mysql              |
+| performance_schema |
+| sys                |
++--------------------+
