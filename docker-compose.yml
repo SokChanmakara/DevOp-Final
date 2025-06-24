@@ -13,6 +13,7 @@ services:
       - app
       - mysql
       - ssh-server
+      - phpmyadmin
     networks:
       - app-network
     restart: unless-stopped
@@ -53,6 +54,25 @@ services:
     volumes:
       - mysql_data:/var/lib/mysql
       - ./backup_chanmakara.sql:/docker-entrypoint-initdb.d/backup.sql:ro
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  # phpMyAdmin for database management
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin:latest
+    container_name: phpmyadmin_devop
+    environment:
+      PMA_HOST: mysql_db_devop
+      PMA_PORT: 3306
+      PMA_USER: root
+      PMA_PASSWORD: root
+      MYSQL_ROOT_PASSWORD: root
+      PMA_ABSOLUTE_URI: http://localhost:8090/phpmyadmin/
+    ports:
+      - "8101:80"  # Direct access port (backup)
+    depends_on:
+      - mysql
     networks:
       - app-network
     restart: unless-stopped
