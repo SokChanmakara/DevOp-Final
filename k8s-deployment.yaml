@@ -1,0 +1,148 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: laravel-web
+  namespace: laravel-app
+  labels:
+    app: laravel-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: laravel-web
+  template:
+    metadata:
+      labels:
+        app: laravel-web
+    spec:
+      containers:
+        - name: web-server
+          image: laravel-web:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8080
+              name: http
+            - containerPort: 22
+              name: ssh
+          volumeMounts:
+            - name: laravel-code
+              mountPath: /var/www
+          env:
+            - name: DB_HOST
+              value: "mysql-service"
+            - name: DB_PORT
+              value: "3306"
+            - name: DB_DATABASE
+              value: "chanmakara-db"
+            - name: DB_USERNAME
+              value: "root"
+            - name: DB_PASSWORD
+              value: "Hello@123"
+            - name: APP_KEY
+              value: "base64:your-app-key-here"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+      volumes:
+        - name: laravel-code
+          emptyDir: {}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysql-db
+  namespace: laravel-app
+  labels:
+    app: mysql-db
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mysql-db
+  template:
+    metadata:
+      labels:
+        app: mysql-db
+    spec:
+      containers:
+        - name: mysql
+          image: mysql:8.0
+          ports:
+            - containerPort: 3306
+              name: mysql
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              value: "Hello@123"
+            - name: MYSQL_DATABASE
+              value: "chanmakara-db"
+            - name: MYSQL_USER
+              value: "laravel"
+            - name: MYSQL_PASSWORD
+              value: "Hello@123"
+          volumeMounts:
+            - name: mysql-data
+              mountPath: /var/lib/mysql
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+      volumes:
+        - name: mysql-data
+          persistentVolumeClaim:
+            claimName: mysql-pvc
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mysql-pvc
+  namespace: laravel-app
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: laravel-web-service
+  namespace: laravel-app
+spec:
+  selector:
+    app: laravel-web
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      nodePort: 30080
+    - name: ssh
+      port: 22
+      targetPort: 22
+      nodePort: 30022
+  type: NodePort
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-service
+  namespace: laravel-app
+spec:
+  selector:
+    app: mysql-db
+  ports:
+    - name: mysql
+      port: 3306
+      targetPort: 3306
+  type: ClusterIP

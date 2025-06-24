@@ -1,0 +1,99 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: laravel-app-single-pod
+  namespace: laravel-app
+  labels:
+    app: laravel-app-single-pod
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: laravel-app-single-pod
+  template:
+    metadata:
+      labels:
+        app: laravel-app-single-pod
+    spec:
+      containers:
+        # Web server container (PHP 8.2 + NGINX + SSH)
+        - name: web-server
+          image: laravel-web:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8080
+              name: http
+            - containerPort: 22
+              name: ssh
+          env:
+            - name: DB_HOST
+              value: "127.0.0.1"
+            - name: DB_PORT
+              value: "3306"
+            - name: DB_DATABASE
+              value: "chanmakara-db"
+            - name: DB_USERNAME
+              value: "root"
+            - name: DB_PASSWORD
+              value: "Hello@123"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+
+        # MySQL database container
+        - name: mysql-db
+          image: mysql:8.0
+          ports:
+            - containerPort: 3306
+              name: mysql
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              value: "Hello@123"
+            - name: MYSQL_DATABASE
+              value: "chanmakara-db"
+            - name: MYSQL_USER
+              value: "laravel"
+            - name: MYSQL_PASSWORD
+              value: "Hello@123"
+          volumeMounts:
+            - name: mysql-data
+              mountPath: /var/lib/mysql
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+
+      volumes:
+        - name: mysql-data
+          emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: laravel-single-pod-service
+  namespace: laravel-app
+spec:
+  selector:
+    app: laravel-app-single-pod
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      nodePort: 30081
+    - name: ssh
+      port: 22
+      targetPort: 22
+      nodePort: 30023
+    - name: mysql
+      port: 3306
+      targetPort: 3306
+      nodePort: 30307
+  type: NodePort

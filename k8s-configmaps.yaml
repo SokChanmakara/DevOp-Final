@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+  namespace: laravel-app
+data:
+  default.conf: |
+    server {
+      listen 8080;
+      index index.php index.html;
+      root /var/www/public;
+      location / {
+        try_files $uri $uri/ /index.php?$query_string;
+      }
+      location ~ \.php$ {
+        include fastcgi_params;
+        fastcgi_pass 127.0.0.1:9000;
+        fastcgi_index index.php;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+      }
+      location ~ /\.ht {
+        deny all;
+      }
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: php-config
+  namespace: laravel-app
+data:
+  php.ini: |
+    memory_limit = 512M
+    upload_max_filesize = 64M
+    post_max_size = 64M

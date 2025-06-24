@@ -1,24 +1,50 @@
-*.log
+# Laravel specific files
+laravel/.env
+laravel/node_modules/
+laravel/public/hot
+laravel/public/storage
+laravel/storage/*.key
+laravel/vendor/
+
+# Laravel logs
+laravel/storage/logs/*.log
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
 .DS_Store
-.env
-.env.backup
-.env.production
-.phpactor.json
-.phpunit.result.cache
-/.fleet
-/.idea
-/.nova
-/.phpunit.cache
-/.vscode
-/.zed
-/auth.json
-/node_modules
-/public/build
-/public/hot
-/public/storage
-/storage/*.key
-/storage/pail
-/vendor
-Homestead.json
-Homestead.yaml
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+
+# Docker files
+.dockerignore
+
+# Kubernetes secrets
+*.key
+*.crt
+
+# Temporary files
+*.tmp
+*.temp
+
+# Database files
+laravel/database/database.sqlite
+
+# Compiled files
+laravel/public/build/
+laravel/public/mix-manifest.json
+
+# Package managers
+laravel/composer.phar
+laravel/.phpunit.result.cache
+laravel/npm-debug.log*
+laravel/yarn-debug.log*
+laravel/yarn-error.log*
